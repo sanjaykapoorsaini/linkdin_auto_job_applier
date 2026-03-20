@@ -18,6 +18,11 @@ from modules.helpers import get_default_temp_profile, make_directories
 from config.settings import run_in_background, stealth_mode, disable_extensions, safe_mode, file_name, failed_file_name, logs_folder_path, generated_resume_path
 from config.questions import default_resume_path
 if stealth_mode:
+    try:
+        import truststore
+        truststore.inject_into_ssl()
+    except ImportError:
+        pass
     import undetected_chromedriver as uc
 else: 
     from selenium import webdriver
@@ -64,8 +69,18 @@ except SessionNotCreatedException as e:
     critical_error_log("Failed to create Chrome Session, retrying with guest profile", e)
     options, driver, actions, wait = createChromeSession(True)
 except Exception as e:
+    err_s = str(e).lower()
     msg = 'Seems like Google Chrome is out dated. Update browser and try again! \n\n\nIf issue persists, try Safe Mode. Set, safe_mode = True in config.py \n\nPlease check GitHub discussions/support for solutions https://github.com/GodsScion/Auto_job_applier_linkedIn \n                                   OR \nReach out in discord ( https://discord.gg/fFp7uUzWCY )'
-    if isinstance(e,TimeoutError): msg = "Couldn't download Chrome-driver. Set stealth_mode = False in config!"
+    if isinstance(e, TimeoutError):
+        msg = "Couldn't download Chrome-driver. Set stealth_mode = False in config!"
+    elif "certificate_verify_failed" in err_s or "ssl" in err_s and "cert" in err_s:
+        msg = (
+            "HTTPS certificate verification failed while downloading ChromeDriver (Chrome itself is usually fine).\n\n"
+            "Fix: pip install truststore  (then run again; the bot injects it when available)\n"
+            "Or: macOS python.org Python — run Install Certificates.command from the Python folder in Applications.\n"
+            "Or: set stealth_mode = False in config/settings.py to use Selenium's driver manager.\n\n"
+            "See: https://github.com/GodsScion/Auto_job_applier_linkedIn"
+        )
     print_lg(msg)
     critical_error_log("In Opening Chrome", e)
     from pyautogui import alert

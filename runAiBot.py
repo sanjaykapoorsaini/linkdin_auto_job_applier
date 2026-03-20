@@ -17,6 +17,15 @@ version:    26.01.20.5.08
 
 # Imports
 import os
+
+# HTTPS uses Python's CA bundle by default; on macOS / some corporate networks that
+# misses the system chain and ChromeDriver download fails with CERTIFICATE_VERIFY_FAILED.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
 import csv
 import re
 import time
