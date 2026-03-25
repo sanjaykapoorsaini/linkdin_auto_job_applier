@@ -18,9 +18,12 @@ version:    26.01.20.5.08
 # Imports
 
 import os
+import re
 import sys
 import json
+import shutil
 import pathlib
+import subprocess
 
 from time import sleep
 from random import randint
@@ -61,10 +64,56 @@ def get_default_temp_profile() -> str:
     # Thanks to https://github.com/vinodbavage31 for suggestion!
     home = pathlib.Path.home()
     if sys.platform.startswith('win'):
-        return "--user-data-dir=C:\\temp\\auto-job-apply-profile"
+        return r"C:\temp\auto-job-apply-profile"
     elif sys.platform.startswith('linux'):
         return str(home / ".auto-job-apply-profile")
     return str(home / "Library" / "Application Support" / "Google" / "Chrome" / "auto-job-apply-profile")
+
+
+def get_chrome_binary_and_version() -> tuple[str | None, int | None]:
+    '''
+    Returns (browser_executable_path, major_version) for Google Chrome or Chromium.
+    Used so undetected-chromedriver matches the installed browser (avoids "chrome not reachable"
+    after Chrome auto-updates) and so the correct binary is used on macOS.
+    '''
+    candidates: list[str] = []
+    if sys.platform == 'darwin':
+        candidates = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        ]
+    elif sys.platform.startswith('win'):
+        pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+        pfx86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        candidates = [
+            os.path.join(pf, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(pfx86, "Google", "Chrome", "Application", "chrome.exe"),
+        ]
+    else:
+        for name in ("google-chrome-stable", "google-chrome", "chromium-browser", "chromium"):
+            found = shutil.which(name)
+            if found:
+                candidates.append(found)
+
+    for binary in candidates:
+        if not binary or not os.path.isfile(binary):
+            continue
+        try:
+            out = subprocess.run(
+                [binary, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            text = (out.stdout or "") + (out.stderr or "")
+            m = re.search(r"(?:Google Chrome|Chromium)\s+(\d+)\.", text)
+            if not m:
+                m = re.search(r"(\d+)\.\d+\.\d+\.\d+", text)
+            major = int(m.group(1)) if m else None
+            return binary, major
+        except (OSError, subprocess.TimeoutExpired, ValueError, IndexError):
+            continue
+    return None, None
 
 
 def find_default_profile_directory() -> str | None:
